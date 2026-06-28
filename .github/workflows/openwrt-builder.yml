@@ -51,7 +51,6 @@ jobs:
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         
-        # 👑 突破工具链锁：卸载旧版 CMake，用官方标准二进制包秒级热升级至最新的 3.31+ 核心编译器
         sudo apt-get remove --purge -y cmake || true
         wget -qO- https://github.com/Kitware/CMake/releases/download/v3.31.5/cmake-3.31.5-linux-x86_64.tar.gz | sudo tar --strip-components=1 -xzC /usr/local
         cmake --version
@@ -84,7 +83,10 @@ jobs:
         find . -type f -name "*.sh" -o -name "Makefile" 2>/dev/null | xargs sed -i 's/\/swapfile/\/workdir\/swapfile_mock\/swapfile/g' 2>/dev/null || true
 
     - name: Install feeds
-      run: cd openwrt && ./scripts/feeds install -a
+      run: |
+        cd openwrt && ./scripts/feeds install -a
+        # 👑 终极降维打击：在安装完 feeds 依赖后，直接修改该插件的 CMakeLists.txt，强行将 CMake 要求降级至 3.30，解除编译链死锁
+        find feeds/ -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" 2>/dev/null | xargs sed -i 's/cmake_minimum_required(VERSION 3.31)/cmake_minimum_required(VERSION 3.30)/g' 2>/dev/null || true
 
     - name: Load custom configuration
       run: |
@@ -117,13 +119,6 @@ jobs:
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
-
-    - name: Upload bin directory
-      uses: actions/upload-artifact@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      with:
-        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
 
     - name: Organize files
       id: organize
