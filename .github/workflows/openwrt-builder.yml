@@ -37,22 +37,40 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+    - name: Free disk space and setup swap
+      run: |
+        sudo swapoff /swapfile 2>/dev/null || true
+        sudo rm -f /swapfile 2>/dev/null || true
+        sudo mkdir -p /mnt/swap
+        sudo fallocate -l 16G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384
+        sudo chmod 600 /mnt/swapfile
+        sudo mkswap /mnt/swapfile
+        sudo swapon /mnt/swapfile
+        echo "=== Memory Status ==="
+        free -h
+        sudo swapon --show
+        echo "=== Disk Status ==="
+        df -hT
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force 2>/dev/null || true
+
     - name: Checkout
-      uses: actions/checkout@main
+      uses: actions/checkout@v4
 
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo mkdir -p /workdir/swapfile_mock
-        sudo chmod 777 /workdir/swapfile_mock
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-        sudo docker image prune --all --force
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpcre2-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         
-        sudo apt-get remove --purge -y cmake || true
-        wget -qO- https://github.com/Kitware/CMake/releases/download/v3.31.5/cmake-3.31.5-linux-x86_64.tar.gz | sudo tar --strip-components=1 -xzC /usr/local
+        sudo apt-get remove --purge -y cmake cmake-data || true
+        wget -qO /tmp/cmake.tar.gz https://github.com/Kitware/CMake/releases/download/v3.31.5/cmake-3.31.5-linux-x86_64.tar.gz
+        sudo tar -xzf /tmp/cmake.tar.gz -C /opt
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cmake /usr/local/bin/cmake
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/ctest /usr/local/bin/ctest
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cpack /usr/local/bin/cpack
+        hash -r
         cmake --version
         
         sudo -E apt-get -qq autoremove --purge
@@ -65,7 +83,6 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
-        find . -type f -name "*.sh" -o -name "Makefile" -o -name "*.py" 2>/dev/null | xargs sed -i 's/\/swapfile/\/workdir\/swapfile_mock\/swapfile/g' 2>/dev/null || true
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
@@ -75,18 +92,12 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-        find . -type f -name "*.sh" -o -name "Makefile" 2>/dev/null | xargs sed -i 's/\/swapfile/\/workdir\/swapfile_mock\/swapfile/g' 2>/dev/null || true
 
     - name: Update feeds
-      run: |
-        cd openwrt && ./scripts/feeds update -a
-        find . -type f -name "*.sh" -o -name "Makefile" 2>/dev/null | xargs sed -i 's/\/swapfile/\/workdir\/swapfile_mock\/swapfile/g' 2>/dev/null || true
+      run: cd openwrt && ./scripts/feeds update -a
 
     - name: Install feeds
-      run: |
-        cd openwrt && ./scripts/feeds install -a
-        # 👑 终极降维打击：在安装完 feeds 依赖后，直接修改该插件的 CMakeLists.txt，强行将 CMake 要求降级至 3.30，解除编译链死锁
-        find feeds/ -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" 2>/dev/null | xargs sed -i 's/cmake_minimum_required(VERSION 3.31)/cmake_minimum_required(VERSION 3.30)/g' 2>/dev/null || true
+      run: cd openwrt && ./scripts/feeds install -a
 
     - name: Load custom configuration
       run: |
@@ -100,7 +111,11 @@ jobs:
       id: package
       run: |
         cd openwrt
+        echo "=== .config first 30 lines ==="
+        cat .config | head -30
+        echo "=== Running make defconfig ==="
         make defconfig
+        echo "=== Downloading packages ==="
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -109,8 +124,16 @@ jobs:
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "=== Memory before compile ==="
+        free -h
+        echo "=== CPU info ==="
+        nproc
+        echo "=== Starting compile with $(nproc) threads ==="
+        make -j$(nproc) || { echo "=== Parallel compile failed, retrying with single thread ==="; make -j1; } || { echo "=== Single thread failed, verbose mode ==="; make -j1 V=s; }
+        if [ ! -d "bin/targets" ]; then
+          echo "ERROR: Compile failed, bin/targets directory not found"
+          exit 1
+        fi
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -120,18 +143,25 @@ jobs:
       if: (!cancelled())
       run: df -hT
 
+    - name: Upload bin directory
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      with:
+        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: /workdir/openwrt/bin
+
     - name: Organize files
       id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd $GITHUB_WORKSPACE/openwrt/bin/targets/*/*
+        cd /workdir/openwrt/bin/targets/*/* || { echo "ERROR: Firmware directory not found"; exit 1; }
         rm -rf packages
         rm -rf *swapfile* || true
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
@@ -146,7 +176,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -154,16 +184,18 @@ jobs:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
         files: |
-          ${{ env.FIRMWARE }}/*
+          ${{ env.FIRMWARE }}/*.img.gz
+          ${{ env.FIRMWARE }}/*.manifest
+          ${{ env.FIRMWARE }}/*.json
 
     - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@main
+      uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 0
         keep_minimum_runs: 2
 
     - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
+      uses: dev-drprasad/delete-older-releases@v0.3.4
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 3
