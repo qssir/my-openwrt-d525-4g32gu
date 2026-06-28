@@ -8,7 +8,7 @@
 
 ### 🚨 1. 健全的底层网络存储拓扑 (解决 AList 挂载硬伤)
 * **标准 FUSE 支持**：原生编译 `kmod-fuse` 与 `fuse-utils`，支持 AList、rclone 将外部大容量 WebDAV、云盘资源直接挂载为本地物理文件夹。
-* **全格式文件系统**：内置 `ext4`、`vfat`、`ntfs3` 强壮驱动，完美释放 N4100 内部 1T 大硬盘存储潜能。
+* **全格式文件系统**：内置 `ext4`、`vfat`、`ntfs3` 强壮驱动，完美释放 存储潜能。
 * **影音广播全家桶**：开箱即用集成 `Samba4`（带局域网 SMB 广播）、`MiniDLNA`、`filebrowser`（网页文件管理器）与 `diskman`（高级磁盘管理）。
 * **全能下载站**：集成 `qbittorrent`、`transmission`、`aria2` 满足全天候 PT/BT 挂机下载需求。
 
