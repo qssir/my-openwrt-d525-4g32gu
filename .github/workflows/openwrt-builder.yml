@@ -119,7 +119,6 @@ jobs:
       run: df -hT
 
     - name: Upload bin directory
-      # 👑 精准校准核心组件官方路径
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
@@ -130,18 +129,21 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd openwrt/bin/targets/*/*
+        # 👑 绝对路径安全锚定：切入目录整理并清理冗余文件
+        cd $GITHUB_WORKSPACE/openwrt/bin/targets/*/*
         rm -rf packages
         rm -rf *swapfile* || true
+        
+        # 注入绝对物理路径到全局环境变量
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
-      # 👑 精准校准核心组件官方路径
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        # 👑 引入全绝对路径穿透，确保上传组件在任何上下文下都能精准锁定打包目录
         path: ${{ env.FIRMWARE }}
 
     - name: Generate release tag
