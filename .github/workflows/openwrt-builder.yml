@@ -15,10 +15,8 @@ name: OpenWrt Builder
 on:
   repository_dispatch:
   workflow_dispatch:
-  # 如需自动编译，取消下面两行注释
   # schedule:
   #   - cron: '0 20 * * 4'
-  # 如需 star 触发，取消下面两行注释
   # watch:
   #   types: [started]
 
@@ -139,17 +137,34 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    - name: Fix CMake for OpenWrt compile
+      run: |
+        cd /workdir/openwrt
+        # 复制新版 CMake 到 OpenWrt 的 host 工具链
+        mkdir -p staging_dir/host/bin
+        cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cmake staging_dir/host/bin/cmake || true
+        cp -f /opt/cmake-3.31.5-linux-x86_64/bin/ctest staging_dir/host/bin/ctest || true
+        cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cpack staging_dir/host/bin/cpack || true
+        # 降级 rpcd-mod-luci 的 CMake 要求（备用方案）
+        find feeds/luci -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" -exec sed -i 's/cmake_minimum_required(VERSION 3\.31)/cmake_minimum_required(VERSION 3.30)/g' {} \;
+        echo "=== rpcd-mod-luci CMakeLists.txt ==="
+        find feeds/luci -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" -exec grep "cmake_minimum_required" {} \;
+
     - name: Compile the firmware
       id: compile
+      env:
+        PATH: /opt/cmake-3.31.5-linux-x86_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       run: |
         cd openwrt
+        echo "=== PATH ==="
+        echo $PATH
+        echo "=== Which CMake ==="
+        which cmake
+        cmake --version
         echo "=== Memory before compile ==="
         free -h
         echo "=== CPU info ==="
         nproc
-        echo "=== CMake in compile env ==="
-        which cmake
-        cmake --version
         echo "=== Starting compile with $(nproc) threads ==="
         make -j$(nproc) || { echo "=== Parallel compile failed, retrying with single thread ==="; make -j1; } || { echo "=== Single thread failed, verbose mode ==="; make -j1 V=s; }
         if [ ! -d "bin/targets" ]; then
