@@ -64,14 +64,29 @@ jobs:
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpcre2-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         
+        # 彻底移除旧版 CMake
         sudo apt-get remove --purge -y cmake cmake-data || true
+        sudo rm -f /usr/bin/cmake /usr/bin/ctest /usr/bin/cpack /usr/local/bin/cmake /usr/local/bin/ctest /usr/local/bin/cpack
+        
+        # 安装 CMake 3.31.5
         wget -qO /tmp/cmake.tar.gz https://github.com/Kitware/CMake/releases/download/v3.31.5/cmake-3.31.5-linux-x86_64.tar.gz
         sudo tar -xzf /tmp/cmake.tar.gz -C /opt
+        
+        # 创建全局符号链接
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cmake /usr/bin/cmake
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/ctest /usr/bin/ctest
+        sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cpack /usr/bin/cpack
         sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cmake /usr/local/bin/cmake
         sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/ctest /usr/local/bin/ctest
         sudo ln -sf /opt/cmake-3.31.5-linux-x86_64/bin/cpack /usr/local/bin/cpack
+        
+        # 刷新缓存并验证
         hash -r
+        echo "=== CMake Version Check ==="
+        which cmake
         cmake --version
+        echo "=== CTest Version Check ==="
+        ctest --version
         
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
@@ -128,6 +143,9 @@ jobs:
         free -h
         echo "=== CPU info ==="
         nproc
+        echo "=== CMake in compile env ==="
+        which cmake
+        cmake --version
         echo "=== Starting compile with $(nproc) threads ==="
         make -j$(nproc) || { echo "=== Parallel compile failed, retrying with single thread ==="; make -j1; } || { echo "=== Single thread failed, verbose mode ==="; make -j1 V=s; }
         if [ ! -d "bin/targets" ]; then
