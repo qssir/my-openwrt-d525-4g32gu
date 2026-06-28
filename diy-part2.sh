@@ -12,8 +12,15 @@ sed -i 's/192.168.1.1/192.168.2.1/g' package/base-files/files/bin/config_generat
 # 修改默认密码为 password
 sed -i 's/root:::0:99999:7:::/root:$1$O9mCis8O$8GPrlP7QpE1mQ79fI2n64\.:18888:0:99999:7:::/g' package/base-files/files/etc/shadow
 
-# 强制默认主题为 Argon
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
+# 【核心修复】使用安全的 uci-defaults 注入法切换 Argon 主题，绝不破坏 LuCI 编译树
+mkdir -p files/etc/uci-defaults
+cat << 'EOF' > files/etc/uci-defaults/30_luci-theme-argon
+#!/bin/sh
+uci set luci.main.mediaurlbase='/luci-static/argon'
+uci commit luci
+exit 0
+EOF
+chmod +x files/etc/uci-defaults/30_luci-theme-argon
 
 
 # =====================================================================
