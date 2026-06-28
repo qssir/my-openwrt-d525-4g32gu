@@ -15,10 +15,12 @@ name: OpenWrt Builder
 on:
   repository_dispatch:
   workflow_dispatch:
-  schedule:
-    - cron: '0 20 * * 4'
-  watch:
-    types: [started]
+  # 如需自动编译，取消下面两行注释
+  # schedule:
+  #   - cron: '0 20 * * 4'
+  # 如需 star 触发，取消下面两行注释
+  # watch:
+  #   types: [started]
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
@@ -56,6 +58,8 @@ jobs:
 
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
     - name: Initialization environment
       env:
@@ -131,7 +135,7 @@ jobs:
         echo "=== Running make defconfig ==="
         make defconfig
         echo "=== Downloading packages ==="
-        make download -j8
+        make download -j8 || make download -j1 || { echo "Download failed, retrying..."; sleep 30; make download -j1; }
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
@@ -166,7 +170,7 @@ jobs:
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: /workdir/openwrt/bin
+        path: /workdir/openwrt/bin/targets
 
     - name: Organize files
       id: organize
@@ -190,7 +194,9 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
+        echo "N4100 ImmortalWrt 24.10 固件" > release.txt
+        echo "编译时间: $(date)" >> release.txt
+        echo "源码: $REPO_URL ($REPO_BRANCH)" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
