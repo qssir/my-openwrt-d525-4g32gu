@@ -145,10 +145,35 @@ jobs:
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cmake staging_dir/host/bin/cmake || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/ctest staging_dir/host/bin/ctest || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cpack staging_dir/host/bin/cpack || true
-        # 降级 rpcd-mod-luci 的 CMake 要求（备用方案）
-        find feeds/luci -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" -exec sed -i 's/cmake_minimum_required(VERSION 3\.31)/cmake_minimum_required(VERSION 3.30)/g' {} \;
-        echo "=== rpcd-mod-luci CMakeLists.txt ==="
-        find feeds/luci -name "CMakeLists.txt" -path "*/rpcd-mod-luci/*" -exec grep "cmake_minimum_required" {} \;
+        
+        # 修改 OpenWrt 的 cmake.mk 强制使用系统 CMake
+        if [ -f "include/cmake.mk" ]; then
+          sed -i 's|CMAKE_COMMAND := .*|CMAKE_COMMAND := /usr/bin/cmake|g' include/cmake.mk || true
+          echo "=== cmake.mk CMAKE_COMMAND ==="
+          grep "CMAKE_COMMAND" include/cmake.mk | head -3
+        fi
+        
+        # 全局降级所有 CMakeLists.txt 的 3.31 要求
+        echo "=== Fixing CMakeLists.txt files ==="
+        find . -name "CMakeLists.txt" -exec grep -l "cmake_minimum_required(VERSION 3.31" {} \; | while read f; do
+          echo "Fixing: $f"
+          sed -i 's/cmake_minimum_required(VERSION 3\.31)/cmake_minimum_required(VERSION 3.30)/g' "$f"
+        done
+        
+        # 修改 tools/cmake/Makefile 的版本号
+        if [ -f "tools/cmake/Makefile" ]; then
+          sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=3.31.5/g' tools/cmake/Makefile || true
+          echo "=== tools/cmake/Makefile PKG_VERSION ==="
+          grep "PKG_VERSION" tools/cmake/Makefile | head -3
+        fi
+        
+        echo "=== Verification ==="
+        echo "System cmake:"
+        /usr/bin/cmake --version
+        echo "Staging cmake:"
+        ./staging_dir/host/bin/cmake --version 2>/dev/null || echo "not found"
+        echo "Modified CMakeLists.txt count:"
+        find . -name "CMakeLists.txt" -exec grep -l "cmake_minimum_required(VERSION 3.30" {} \; | wc -l
 
     - name: Compile the firmware
       id: compile
