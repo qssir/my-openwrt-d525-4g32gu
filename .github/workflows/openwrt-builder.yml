@@ -140,11 +140,22 @@ jobs:
     - name: Fix CMake for OpenWrt compile
       run: |
         cd /workdir/openwrt
+        # 恢复 tools/cmake/Makefile（如果之前被修改）
+        git checkout tools/cmake/Makefile 2>/dev/null || true
+        
         # 复制新版 CMake 到 OpenWrt 的 host 工具链
         mkdir -p staging_dir/host/bin
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cmake staging_dir/host/bin/cmake || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/ctest staging_dir/host/bin/ctest || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cpack staging_dir/host/bin/cpack || true
+        chmod +x staging_dir/host/bin/*
+        
+        # 创建标记文件，欺骗 OpenWrt 认为 CMake 已编译完成
+        mkdir -p build_dir/host/cmake-3.31.5
+        touch build_dir/host/cmake-3.31.5/.prepared
+        touch build_dir/host/cmake-3.31.5/.configured
+        touch build_dir/host/cmake-3.31.5/.built
+        touch build_dir/host/cmake-3.31.5/.installed
         
         # 修改 OpenWrt 的 cmake.mk 强制使用系统 CMake
         if [ -f "include/cmake.mk" ]; then
@@ -159,13 +170,6 @@ jobs:
           echo "Fixing: $f"
           sed -i 's/cmake_minimum_required(VERSION 3\.31)/cmake_minimum_required(VERSION 3.30)/g' "$f"
         done
-        
-        # 修改 tools/cmake/Makefile 的版本号
-        if [ -f "tools/cmake/Makefile" ]; then
-          sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=3.31.5/g' tools/cmake/Makefile || true
-          echo "=== tools/cmake/Makefile PKG_VERSION ==="
-          grep "PKG_VERSION" tools/cmake/Makefile | head -3
-        fi
         
         echo "=== Verification ==="
         echo "System cmake:"
