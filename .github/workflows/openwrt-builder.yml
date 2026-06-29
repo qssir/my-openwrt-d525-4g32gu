@@ -148,7 +148,8 @@ jobs:
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cmake staging_dir/host/bin/cmake || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/ctest staging_dir/host/bin/ctest || true
         cp -f /opt/cmake-3.31.5-linux-x86_64/bin/cpack staging_dir/host/bin/cpack || true
-        chmod +x staging_dir/host/bin/*
+        # 只给实际复制的文件加权限，不处理符号链接
+        chmod +x staging_dir/host/bin/cmake staging_dir/host/bin/ctest staging_dir/host/bin/cpack || true
         
         # 创建标记文件，欺骗 OpenWrt 认为 CMake 已编译完成
         mkdir -p build_dir/host/cmake-3.31.5
