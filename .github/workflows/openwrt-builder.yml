@@ -1,13 +1,6 @@
 # https://github.com/P3TERX/Actions-OpenWrt
-#
 # File: .github/workflows/openwrt-builder.yml
 # Description: Build OpenWrt using GitHub Actions with Auto-Update Trigger
-#
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
 
 name: OpenWrt Builder
 
@@ -30,6 +23,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     steps:
     - name: Free disk space and setup swap
@@ -84,10 +79,7 @@ jobs:
       run: cd openwrt && ./scripts/feeds update -a
 
     - name: Install feeds
-      run: |
-        cd openwrt && ./scripts/feeds install -a
-        # 👑 1. 核心插件门槛降级：防止拉取回来的激进 feeds 锁定过高的编译版本限制
-        find feeds/ -name "CMakeLists.txt" -exec sed -i 's/cmake_minimum_required(VERSION 3\.31)/cmake_minimum_required(VERSION 3.30)/g' {} \; 2>/dev/null || true
+      run: cd openwrt && ./scripts/feeds install -a
 
     - name: Load custom configuration
       run: |
@@ -101,12 +93,6 @@ jobs:
       id: package
       run: |
         cd openwrt
-        
-        # 👑 2. 战略战略断腕补丁：在执行配置前，从 .config 中强行彻底剔除引发环境死锁的 python3 软件包组件
-        # 同时关闭依赖于它的非必要三方辅助组件，确保核心影视、组网、eBPF 代理及大分区 100% 满血生成
-        sed -i 's/CONFIG_PACKAGE_python3=y/# CONFIG_PACKAGE_python3 is not set/g' .config 2>/dev/null || true
-        sed -i 's/CONFIG_PACKAGE_luci-app-store=y/# CONFIG_PACKAGE_luci-app-store is not set/g' .config 2>/dev/null || true
-        
         echo "=== Running make defconfig ==="
         make defconfig
         echo "=== Downloading packages ==="
@@ -166,7 +152,7 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        echo "N4100 ImmortalWrt 24.10 固件" > release.txt
+        echo "Atom D525 ImmortalWrt 24.10 专属固件" > release.txt
         echo "编译时间: $(date)" >> release.txt
         echo "源码: $REPO_URL ($REPO_BRANCH)" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
